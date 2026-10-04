@@ -21,12 +21,12 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | Thing on the board | Gesture | What happens |
 |---|---|---|
 | Rocker switch | Toggle | The board goes dark. After a pause, a pair of eyes appears somewhere |
-| Penguin | Press | It squawks and reacts to the weather: drips in rain, shivers in snow, puts on sunglasses in sun |
+| Penguin | Press | It squawks. It also dresses for the weather: umbrella in rain, puffy jacket and bobble hat in snow, sunshades and a tropical drink in sun |
 | Three round buttons | Press | Sun, rain or snow across the whole board. Press again to clear it |
 | Cable and plug | Drag into a socket | The top socket gives coloured power, the lower one white light |
 | Crocodile | Pull the jaw up, let go | Chomp, chomp, chomp: it snaps shut a few times. It splashes if it's raining |
 | Slider | Drag | Lighting changes smoothly from blue to green to another blue |
-| Giraffe | (it just watches) | Dances a tiny disco when coloured power is on |
+| Giraffe | Press | Swivels its head from side to side. Dances a tiny disco when coloured power is on |
 | Drawer | Pull out, push in | A different silly picture each time |
 | Flap | Lift | A worm in a top hat |
 | Wheel | Turn or flick | Spins the four-picture cross and changes the disco pattern |
@@ -37,10 +37,15 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | "red" blob | Press | Red paint floods the background. Press again and it drains back into the button |
 | "green" blob | Press | A few splats of green paint land around the board, then slowly dry and fade |
 | "red" and "green" together | Hold both at once | The whole board hops. Made for two fingers or two people |
-| Fogged mirror | Rub | A face appears. The fog slowly comes back |
+| Fogged mirror | Rub | A funny face appears. The fog slowly comes back, and next time it's a different face |
 | Ladybird | Drag anywhere | The crocodile watches it, the giraffe giggles, the curtain wiggles, something peeks out of the window |
 | Window | (nothing) | Every so often, something passes by on its own |
 | Little door | Tap | A mouse |
+| DO NOT TOUCH!! button | Press (you know you want to) | Warning beeps and a siren, the board fades out, and everything goes back to how it started |
+
+## Colour shows cause and effect
+
+While you touch a control, it lights up in colour, and so does whatever it changes. Turning the wheel lights up the cross it drives. A weather button lights up the penguin. When the lever's surprise goes off, the giraffe or penguin it affected lights up too. The colour fades shortly after you let go.
 
 ## Shared state
 
