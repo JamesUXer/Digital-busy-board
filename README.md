@@ -24,7 +24,7 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | Penguin | Press | It squawks and reacts to the weather: drips in rain, shivers in snow, puts on sunglasses in sun |
 | Three round buttons | Press | Sun, rain or snow across the whole board. Press again to clear it |
 | Cable and plug | Drag into a socket | The top socket gives coloured power, the lower one white light |
-| Crocodile | Drag the jaw open, let go | Snap! It splashes if it's raining |
+| Crocodile | Pull the jaw up, let go | Chomp, chomp, chomp: it snaps shut a few times. It splashes if it's raining |
 | Slider | Drag | Lighting changes smoothly from blue to green to another blue |
 | Giraffe | (it just watches) | Dances a tiny disco when coloured power is on |
 | Drawer | Pull out, push in | A different silly picture each time |

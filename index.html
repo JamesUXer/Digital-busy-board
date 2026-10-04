@@ -624,7 +624,7 @@ const SOCKETS = [{ x: 155, y: 395, mode: 'colour' }, { x: 160, y: 467, mode: 'wh
 /* ------------------------------------------------------------------ */
 /* 5. crocodile                                                        */
 /* ------------------------------------------------------------------ */
-const croc = { angle: 0, held: false, snapping: false, bounce: 0, base: 0, sy: 0 };
+const croc = { angle: 0, held: false, chomps: [], bounce: 0, base: 0, sy: 0 };
 const CROC_H = [500, 392];
 {
   const g = hopper();
@@ -654,28 +654,42 @@ const CROC_H = [500, 392];
   croc.upper = up;
   hit('rect', { x: 360, y: 336, width: 156, height: 96 });
   onDrag(HITS.lastChild, {
-    down(p) { croc.held = true; croc.snapping = false; croc.base = croc.angle; croc.sy = p.y; croc.sx = p.x; },
+    down(p) { croc.held = true; croc.chomps = []; croc.base = croc.angle; croc.sy = p.y; croc.sx = p.x; },
     move(p) { croc.angle = clamp(croc.base + (croc.sy - p.y) * .45 + (croc.sx - p.x) * .12, 0, 38); },
-    up() { croc.held = false; if (croc.angle > 4) croc.snapping = true; else croc.angle = 0; }
+    up() {
+      croc.held = false;
+      const a = croc.angle;
+      // let go: snap shut, then chomp a couple more times, each smaller
+      if (a > 4) croc.chomps = [0, a * .62, 0, a * .36, 0];
+      else croc.angle = 0;
+    }
   });
 }
 function renderCroc() {
   const a = croc.angle + croc.bounce;
-  croc.upper.setAttribute('transform', `rotate(${F(-a)} ${CROC_H[0]} ${CROC_H[1]})`);
+  croc.upper.setAttribute('transform', `rotate(${F(a)} ${CROC_H[0]} ${CROC_H[1]})`);
   if (a > .5) {
-    const t = rad(-a), [hx, hy] = CROC_H, dx = 381 - hx, dy = 389 - hy;
+    const t = rad(a), [hx, hy] = CROC_H, dx = 381 - hx, dy = 389 - hy;
     const tx = hx + dx * Math.cos(t) - dy * Math.sin(t), ty = hy + dx * Math.sin(t) + dy * Math.cos(t);
     croc.mouth.setAttribute('d', `M${hx} ${hy} L${F(tx)} ${F(ty)} Q${F((tx + 382) / 2 - 6)} ${F((ty + 400) / 2)} 384 400Z`);
     croc.tongue.setAttribute('d', `M${hx - 8} ${hy + 2} Q${F((hx + 400) / 2)} ${F(hy - a * .5)} ${F(lerp(hx, 400, .85))} ${F(hy + 2)}`);
   } else { croc.mouth.setAttribute('d', ''); croc.tongue.setAttribute('d', ''); }
 }
 function updateCroc(dt) {
-  if (croc.snapping) {
-    croc.angle -= 520 * dt;
-    if (croc.angle <= 0) {
-      croc.angle = 0; croc.snapping = false; croc.bounce = 5;
-      sfx.clack();
-      if (state.weather === 'rain') { sfx.splash(); burst(392, 392, 18, ['#6fa6e6', '#9cc4f0', '#3d7fd0'], 'drop'); }
+  if (croc.chomps.length) {
+    const target = croc.chomps[0];
+    if (target === 0) {
+      croc.angle -= 560 * dt;
+      if (croc.angle <= 0) {
+        croc.angle = 0; croc.chomps.shift();
+        const last = !croc.chomps.length;
+        croc.bounce = last ? 4 : 0;
+        sfx.clack();
+        if (state.weather === 'rain') { sfx.splash(); burst(392, 392, last ? 8 : 14, ['#6fa6e6', '#9cc4f0', '#3d7fd0'], 'drop'); }
+      }
+    } else {
+      croc.angle += 220 * dt;
+      if (croc.angle >= target) { croc.angle = target; croc.chomps.shift(); }
     }
   }
   if (croc.bounce > 0) croc.bounce = Math.max(0, croc.bounce - 40 * dt);
