@@ -115,6 +115,9 @@ html[data-power=colour] .shell{fill:#ff4a3a}
 
 .splatIn{transform-box:fill-box;transform-origin:center;animation:splatIn .22s cubic-bezier(.2,1.6,.4,1) both}
 @keyframes splatIn{0%{transform:scale(.2)}100%{transform:scale(1)}}
+.pk{transform-box:fill-box;transform-origin:center}
+.pk.poke{animation:poke .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes poke{0%{transform:none}35%{transform:scale(1.4) rotate(-8deg)}70%{transform:scale(.92) rotate(5deg)}100%{transform:none}}
 #owlRays{opacity:0;transition:opacity .25s}
 #owlRays.on{opacity:1}
 
@@ -336,6 +339,21 @@ const sfx = {
   pour: () => play('pour', t => { noise(t, .5, .3, 'lowpass', 300, 1, 1400); tone('sine', 120, t, .4, .15, 70); return .5; }, 300),
   drain: () => play('drain', t => { noise(t, .45, .25, 'lowpass', 1400, 1, 250); tone('sine', 260, t, .4, .08, 90); return .45; }, 300),
   splat: () => play('splat', t => { tone('sine', 170, t, .12, .35, 55); noise(t, .14, .45, 'lowpass', 900); noise(t + .05, .08, .2, 'bandpass', 2400, 2); return .16; }, 60),
+  woof: () => play('woof', t => {
+    [0, .2].forEach(d => { const o = tone('sawtooth', 420, t + d, .13, .16, 170); noise(t + d, .06, .25, 'lowpass', 900); void o; });
+    return .36;
+  }, 300),
+  meow: () => play('meow', t => {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'sawtooth'; f.type = 'bandpass'; f.Q.value = 4;
+    o.frequency.setValueAtTime(480, t); o.frequency.linearRampToValueAtTime(720, t + .18); o.frequency.linearRampToValueAtTime(430, t + .55);
+    f.frequency.setValueAtTime(900, t); f.frequency.linearRampToValueAtTime(1900, t + .2); f.frequency.linearRampToValueAtTime(800, t + .55);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.35, t + .05); g.gain.setValueAtTime(.35, t + .38); g.gain.exponentialRampToValueAtTime(.0001, t + .6);
+    o.connect(f).connect(g).connect(master); o.start(t); o.stop(t + .62);
+    return .62;
+  }, 400),
+  blub: () => play('blub', t => { [0, .11, .2].forEach((d, i) => tone('sine', 260 + i * 70, t + d, .08, .22, 900 + i * 200)); return .3; }, 250),
+  tweet: () => play('tweet', t => { [0, .13, .22].forEach((d, i) => tone('sine', 2300 + i * 150, t + d, .08, .12, 3400 + i * 200)); return .32; }, 250),
   tada: () => play('tada', t => { [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, t + i * .085, .28, .18)); return .6; }, 600),
   boop: () => play('boop', t => { tone('sine', 330, t, .08, .12, 300); return .09; }, 60),
   deflate: () => play('deflate', t => { const o = tone('sawtooth', 320, t, .5, .08, 70); const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 28; lg.gain.value = 40; l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + .52); return .52; }, 300),
@@ -790,6 +808,7 @@ function updateNeck(dt) {
 /* cross / turntable (driven by the wheel)                             */
 /* ------------------------------------------------------------------ */
 const CX = 768, CY = 580;
+let crossHits = null;
 const crossG = (() => {
   const outer = hopper();
   const g = G(outer, { id: 'cross' });
@@ -799,11 +818,17 @@ const crossG = (() => {
   const head = (pts, ang) => { const [x, y] = pts[pts.length - 1]; const t = rad(ang + 90); P(g, `M${F(x + Math.cos(t + 2.5) * 8)} ${F(y + Math.sin(t + 2.5) * 8)} L${F(x)} ${F(y)} L${F(x + Math.cos(t - 2.5) * 8)} ${F(y + Math.sin(t - 2.5) * 8)}`, 3.5); };
   head(a1, -40); head(a2, 140);
   const pics = [drawDog, drawCat, drawFish, drawBird];
+  const noises = [() => sfx.woof(), () => sfx.meow(), () => sfx.blub(), () => sfx.tweet()];
+  // tap targets turn with the cross, so each picture keeps its own noise wherever it ends up
+  crossHits = G(HITS);
   for (let k = 0; k < 4; k++) {
     const arm = G(g, { transform: `rotate(${k * 90} ${CX} ${CY})` });
     P(arm, line(705, 452, 831, 452), 5); P(arm, line(831, 452, 810, 522), 5); P(arm, line(810, 522, 726, 522), 5); P(arm, line(726, 522, 705, 452), 5);
     const pic = G(arm, { transform: `rotate(${-k * 90} 768 487) translate(768 487)` });
-    pics[k](pic);
+    const inner = G(pic, { class: 'pk' });
+    pics[k](inner);
+    const h = mk('circle', { class: 'hit', cx: 768, cy: 487, r: 46 }, G(crossHits, { transform: `rotate(${k * 90} ${CX} ${CY})` }));
+    onDrag(h, { down() { noises[k](); inner.classList.remove('poke'); void inner.getBBox(); inner.classList.add('poke'); } });
   }
   return g;
 })();
@@ -970,6 +995,7 @@ function updateWheel(dt) {
   const deg = wheel.angle * 180 / Math.PI;
   wheel.g.setAttribute('transform', `rotate(${F(deg)} ${WX} ${WY})`);
   crossG.setAttribute('transform', `rotate(${F(deg)} ${CX} ${CY})`);
+  crossHits.setAttribute('transform', `rotate(${F(deg)} ${CX} ${CY})`);
 }
 const discoPattern = () => Math.floor((((wheel.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2 / 3));
 

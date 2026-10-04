@@ -30,6 +30,7 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | Drawer | Pull out, push in | A different silly picture each time |
 | Flap | Lift | A worm in a top hat |
 | Wheel | Turn or flick | Spins the four-picture cross and changes the disco pattern |
+| Pictures on the cross | Press | Dog woofs, cat meows, fish blubs, bird tweets, wherever the wheel has turned them |
 | Curtain | Drag sideways | An owl |
 | Spring lever | Pull down, let go | Something silly happens somewhere else, on release |
 | "blue" blob | Press and hold | A balloon inflates, then deflates when you let go |
