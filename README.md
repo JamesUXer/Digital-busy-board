@@ -29,7 +29,7 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | Giraffe | Press | Swivels its head from side to side. Dances a tiny disco, with friendly disco music, while coloured power is plugged in |
 | Drawer | Pull out, push in | A different silly picture each time |
 | Flap | Lift | A worm in a top hat |
-| Wheel | Turn or flick | Spins the four-picture cross and changes the disco pattern |
+| Wheel | Turn or flick | Spins the four-picture cross and changes the disco pattern. Turn it against the arrow and it jams with a crash: the characters tumble out of their boxes, then fly back a few seconds later |
 | Pictures on the cross | Press | Dog woofs, cat meows, fish blubs, bird tweets, wherever the wheel has turned them |
 | Curtain | Drag sideways | An owl |
 | Spring lever | Pull down, let go | Something silly happens somewhere else, on release |

@@ -187,6 +187,7 @@ html.resetting #fx{opacity:0;transition:opacity 1.2s}
   <g id="L_balloon"></g>
   <g id="L_reset"></g>
   <g id="L_hits"></g>
+  <g id="L_fall"></g>
   <g id="L_cable"></g>
   <g id="L_lb"></g>
   <g id="dark" mask="url(#darkMask)"><rect x="0" y="0" width="1100" height="1200" fill="#08080b"/></g>
@@ -419,6 +420,13 @@ const sfx = {
     return 1.7;
   }, 2000),
   beep: () => play('beep', t => { tone('square', 1200, t, .07, .06); tone('square', 1200, t + .12, .07, .06); return .22; }, 200),
+  crash: () => play('crash', t => {
+    noise(t, .5, .9, 'lowpass', 2600); tone('sawtooth', 320, t + .04, .55, .1, 55);
+    for (let i = 0; i < 8; i++) noise(t + .07 * i + Math.random() * .03, .05, .5, 'bandpass', 1400 + Math.random() * 2800, 3);
+    return .9;
+  }, 800),
+  bonk: () => play('bonk', t => { tone('sine', 260 + Math.random() * 220, t, .09, .22, 110); return .1; }, 70),
+  whoop: () => play('whoop', t => { tone('sine', 320, t, .8, .14, 1400); return .82; }, 800),
   tada: () => play('tada', t => { [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, t + i * .085, .28, .18)); return .6; }, 600),
   boop: () => play('boop', t => { tone('sine', 330, t, .08, .12, 300); return .09; }, 60),
   deflate: () => play('deflate', t => { const o = tone('sawtooth', 320, t, .5, .08, 70); const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 28; lg.gain.value = 40; l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + .52); return .52; }, 300),
@@ -931,6 +939,7 @@ function updateNeck(dt) {
 /* ------------------------------------------------------------------ */
 const CX = 768, CY = 580;
 let crossHits = null;
+const crossPics = [];
 const crossG = (() => {
   const outer = hopper();
   const g = G(outer, { id: 'cross' });
@@ -948,9 +957,10 @@ const crossG = (() => {
     P(arm, line(705, 452, 831, 452), 5); P(arm, line(831, 452, 810, 522), 5); P(arm, line(810, 522, 726, 522), 5); P(arm, line(726, 522, 705, 452), 5);
     const pic = G(arm, { transform: `rotate(${-k * 90} 768 487) translate(768 487)` });
     const inner = G(pic, { class: 'pk' });
+    crossPics.push(inner);
     pics[k](inner);
     const h = mk('circle', { class: 'hit', cx: 768, cy: 487, r: 46 }, G(crossHits, { transform: `rotate(${k * 90} ${CX} ${CY})` }));
-    onDrag(h, { glow: [['cross'], '#ff8a3f'], down() { noises[k](); inner.classList.remove('poke'); void inner.getBBox(); inner.classList.add('poke'); } });
+    onDrag(h, { glow: [['cross'], '#ff8a3f'], down() { if (crash.on) return; noises[k](); inner.classList.remove('poke'); void inner.getBBox(); inner.classList.add('poke'); } });
   }
   return g;
 })();
@@ -1100,11 +1110,12 @@ const wheel = { angle: 0, vel: 0, held: false, lastA: 0, lastT: 0, tickAcc: 0 };
     move(p) {
       if (D(p.x, p.y, WX, WY) < 14) return;
       const a = Math.atan2(p.y - WY, p.x - WX);
+      if (crash.on && crash.t < .9) { wheel.lastA = a; return; } // jammed
       let d = a - wheel.lastA; if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2;
       const now = performance.now(), dt = Math.max(8, now - wheel.lastT) / 1000;
       wheel.angle += d; wheel.vel = lerp(wheel.vel, d / dt, .5);
       wheel.lastA = a; wheel.lastT = now;
-      wheelTicks(d);
+      wheelTicks(d); wrongWay(d);
     },
     up() { wheel.held = false; wheel.vel = clamp(wheel.vel, -14, 14); if (performance.now() - wheel.lastT > 120) wheel.vel = 0; }
   });
@@ -1112,14 +1123,62 @@ const wheel = { angle: 0, vel: 0, held: false, lastA: 0, lastT: 0, tickAcc: 0 };
 function wheelTicks(d) { wheel.tickAcc += Math.abs(d); if (wheel.tickAcc > rad(15)) { wheel.tickAcc = 0; sfx.tick(); } }
 function updateWheel(dt) {
   if (!wheel.held && wheel.vel !== 0) {
-    const d = wheel.vel * dt; wheel.angle += d; wheelTicks(d);
+    const d = wheel.vel * dt; wheel.angle += d; wheelTicks(d); wrongWay(d);
     wheel.vel *= Math.pow(.18, dt);
     if (Math.abs(wheel.vel) < .08) wheel.vel = 0;
   }
   const deg = wheel.angle * 180 / Math.PI;
-  wheel.g.setAttribute('transform', `rotate(${F(deg)} ${WX} ${WY})`);
-  crossG.setAttribute('transform', `rotate(${F(deg)} ${CX} ${CY})`);
+  const shudder = crash.on && crash.t < .7 ? Math.sin(crash.t * 70) * 5 * (1 - crash.t / .7) : 0;
+  wheel.g.setAttribute('transform', `rotate(${F(deg + shudder)} ${WX} ${WY})`);
+  crossG.setAttribute('transform', `rotate(${F(deg + shudder)} ${CX} ${CY})`);
   crossHits.setAttribute('transform', `rotate(${F(deg)} ${CX} ${CY})`);
+}
+/* turn the wheel against its arrow and it jams: the characters fall out, then come back */
+const crash = { on: false, t: 0, wrong: 0, fallers: [] };
+const CRASH_REST = 3.4, CRASH_BACK = 1.0;
+function wrongWay(d) {
+  if (crash.on) return;
+  if (d < 0) crash.wrong += -d; else crash.wrong = Math.max(0, crash.wrong - d * 1.5);
+  if (crash.wrong > rad(120)) startCrash();
+}
+const toRoot = el => svg.getScreenCTM().inverse().multiply(el.getScreenCTM());
+function startCrash() {
+  crash.on = true; crash.t = 0; crash.wrong = 0; wheel.vel = 0;
+  sfx.crash(); flashGlow(['cross', 'wheel'], '#ff3b30', 1300);
+  crash.fallers = crossPics.map(inner => {
+    const M = toRoot(inner), g = G($('L_fall')), c = inner.cloneNode(true);
+    c.classList.remove('poke'); g.appendChild(c);
+    inner.setAttribute('opacity', 0);
+    return { g, inner, x: M.e, y: M.f, r: Math.atan2(M.b, M.a) * 180 / Math.PI,
+      vx: (M.e - CX) * 1.6 + (Math.random() - .5) * 220, vy: -240 - Math.random() * 220, vr: (Math.random() - .5) * 700 };
+  });
+}
+function endCrash() {
+  crash.fallers.forEach(f => { f.g.remove(); f.inner.setAttribute('opacity', 1); });
+  crash.fallers = []; crash.on = false; crash.t = 0; crash.wrong = 0;
+}
+const floorY = x => 1160 - (x - 50) * 84 / 926 - 20;
+function updateCrash(dt) {
+  if (!crash.on) return;
+  const before = crash.t; crash.t += dt;
+  if (crash.t < CRASH_REST) {
+    crash.fallers.forEach(f => {
+      f.vy += 1500 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.x < 75 || f.x > 945) { f.x = clamp(f.x, 75, 945); f.vx *= -.5; }
+      const fl = floorY(f.x);
+      if (f.y > fl) { f.y = fl; if (f.vy > 160) { f.vy *= -.38; sfx.bonk(); } else f.vy = 0; f.vx *= .7; f.vr *= .55; }
+    });
+  } else {
+    if (before < CRASH_REST) { sfx.whoop(); crash.fallers.forEach(f => { f.sx = f.x; f.sy = f.y; f.sr = f.r; }); }
+    const p = Math.min(1, (crash.t - CRASH_REST) / CRASH_BACK), e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    crash.fallers.forEach(f => {
+      const M = toRoot(f.inner), tr = Math.atan2(M.b, M.a) * 180 / Math.PI;
+      let dr = ((tr - f.sr) % 360 + 540) % 360 - 180;
+      f.x = lerp(f.sx, M.e, e); f.y = lerp(f.sy, M.f, e) - Math.sin(p * Math.PI) * 120; f.r = f.sr + dr * e;
+    });
+    if (p >= 1) { endCrash(); sfx.pop(); return; }
+  }
+  crash.fallers.forEach(f => f.g.setAttribute('transform', `translate(${F(f.x)} ${F(f.y)}) rotate(${F(f.r)})`));
 }
 const discoPattern = () => Math.floor((((wheel.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2 / 3));
 
@@ -1988,6 +2047,7 @@ function resetBoard() {
   mirror.faces.forEach((f, i) => f.setAttribute('opacity', i ? 0 : 1));
   for (const k in blobEls) blobEls[k].classList.remove('down');
   bits.length = 0;
+  endCrash();
   for (const k in glowEls) glowEls[k].classList.remove('on');
   applyState(); seedWeather();
 }
@@ -2011,7 +2071,7 @@ function tick(now) {
   const dt = clamp((now - lastT) / 1000, 0, .05); lastT = Math.max(lastT, now); T += dt;
   updateRope(dt); updateCroc(dt); updateWheel(dt); updateLever(dt); updateDrawer(dt); updateFlap(dt); updateDoor(dt);
   updateBalloon(dt); updateRedPaint(dt); updateSplats(now); updateNeck(dt); updateProximity(dt, now); updateDisco(now, T); updateRainbow(T);
-  updateFog(now, dt); updatePasser(dt); updateDarkEyes(dt); drawFX(dt, T);
+  updateFog(now, dt); updateCrash(dt); updatePasser(dt); updateDarkEyes(dt); drawFX(dt, T);
 }
 function frame(now) { tick(now); requestAnimationFrame(frame); }
 // review aid: open with #test to step the board by hand from the console
