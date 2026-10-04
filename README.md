@@ -23,7 +23,7 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | Rocker switch | Toggle | The board goes dark. After a pause, a pair of eyes appears somewhere |
 | Penguin | Press | It squawks. It also dresses for the weather: umbrella in rain, puffy jacket and bobble hat in snow, sunshades and a tropical drink in sun |
 | Three round buttons | Press | Sun, rain or snow across the whole board. Press again to clear it |
-| Cable and plug | Drag into a socket | The top socket gives coloured power, the lower one white light |
+| Cable and plug | Drag the plug into a socket | The top socket gives coloured power, the lower one white light. Grab the cable anywhere along it to move it out of the way |
 | Crocodile | Pull the jaw up, let go | Chomp, chomp, chomp: it snaps shut a few times. It splashes if it's raining |
 | Slider | Drag | Lighting changes smoothly from blue to green to another blue |
 | Giraffe | Press | Swivels its head from side to side. Dances a tiny disco, with friendly disco music, while coloured power is plugged in |

@@ -34,6 +34,7 @@ html[data-light=off][data-power=white] body{background:#16181c}
 /* everything is drawn; only .hit shapes take touches */
 #board *{pointer-events:none}
 #board .hit{pointer-events:all;fill:transparent;stroke:none;cursor:pointer}
+#board .hitStroke{pointer-events:stroke;stroke:transparent;cursor:grab}
 .k{stroke:var(--ink);stroke-linecap:round;stroke-linejoin:round}
 .nos{stroke:none}
 .txt{font-family:var(--hand);fill:var(--ink)}
@@ -184,12 +185,12 @@ html.resetting #fx{opacity:0;transition:opacity 1.2s}
   <g id="L_paint" clip-path="url(#boardClip)"></g>
   <g id="L_snow" class="w-snow"></g>
   <g id="L_balloon"></g>
+  <g id="L_reset"></g>
   <g id="L_hits"></g>
   <g id="L_cable"></g>
   <g id="L_lb"></g>
   <g id="dark" mask="url(#darkMask)"><rect x="0" y="0" width="1100" height="1200" fill="#08080b"/></g>
   <g id="L_top"></g>
-  <g id="L_reset"></g>
   <rect id="resetFade" x="0" y="0" width="1100" height="1200" fill="#fff" opacity="0"/>
   <g id="L_alarm"></g>
 </svg>
@@ -1586,7 +1587,7 @@ function updateProximity(dt, now) {
 /* ------------------------------------------------------------------ */
 /* 4. cable: verlet rope, drag the plug into a socket                  */
 /* ------------------------------------------------------------------ */
-const rope = { N: 46, pts: [], prev: [], seg: 0, held: false, socket: null, tx: 0, ty: 0, ox: 0, oy: 0, awake: 30 };
+const rope = { N: 46, pts: [], prev: [], seg: 0, held: false, socket: null, tx: 0, ty: 0, ox: 0, oy: 0, awake: 30, grab: -1, gx: 0, gy: 0 };
 const ANCHOR = [952, 412];
 {
   const path = [ANCHOR, [1000, 406], [1036, 372], [1046, 300], [1042, 220], [1012, 158], [952, 118], [870, 100], [780, 104], [700, 112], [640, 118], [598, 96], [612, 60], [680, 44], [760, 40], [800, 64], [760, 84], [720, 70], [750, 50], [842, 48]];
@@ -1605,6 +1606,20 @@ const ANCHOR = [952, 412];
   rope.inner = mk('path', { fill: 'none', stroke: '#fff', 'stroke-width': 8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, L);
   box(L, 928, 388, 26, 48, 5);
   P(L, line(934, 398, 948, 398, .3), 2.5); P(L, line(934, 426, 948, 426, .3), 2.5);
+  // wide invisible strip along the cable so it can be picked up from anywhere
+  rope.strip = mk('path', { class: 'hitStroke', fill: 'none', 'stroke-width': 40, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, L);
+  onDrag(rope.strip, {
+    down(p) {
+      let best = -1, bd = Infinity;
+      const last = rope.socket ? rope.N - 2 : rope.N - 1;
+      for (let i = 1; i <= last; i++) { const d = D(p.x, p.y, rope.pts[i][0], rope.pts[i][1]); if (d < bd) { bd = d; best = i; } }
+      if (best < 0) return false;
+      rope.grab = best; rope.ox = rope.pts[best][0] - p.x; rope.oy = rope.pts[best][1] - p.y;
+      rope.gx = rope.pts[best][0]; rope.gy = rope.pts[best][1]; rope.awake = 60;
+    },
+    move(p) { rope.gx = clamp(p.x + rope.ox, VB.x + 10, VB.x + VB.w - 10); rope.gy = clamp(p.y + rope.oy, VB.y + 10, VB.y + VB.h - 10); rope.awake = 60; },
+    up() { rope.grab = -1; rope.awake = 60; }
+  });
   rope.plug = G(L);
   box(rope.plug, -52, -15, 34, 30, 5);
   P(rope.plug, line(-44, -6, -26, -6, .3), 2.2); P(rope.plug, line(-44, 6, -26, 6, .3), 2.2);
@@ -1631,7 +1646,7 @@ function updateRope(dt) {
   if (rope.awake <= 0) return;
   const { pts, prev, N, seg } = rope;
   const pinEnd = rope.held || rope.socket;
-  const pinned = i => i === 0 || (i === N && pinEnd) || (i === N - 1 && rope.socket);
+  const pinned = i => i === 0 || i === rope.grab || (i === N && pinEnd) || (i === N - 1 && rope.socket);
   for (let i = 1; i <= N; i++) {
     if (pinned(i)) continue;
     const p = pts[i], q = prev[i];
@@ -1644,6 +1659,7 @@ function updateRope(dt) {
   if (pinEnd) { prev[N][0] = end[0]; prev[N][1] = end[1]; }
   if (rope.socket) { const q = pts[N - 1]; q[0] = lerp(q[0], end[0] + seg, .35); q[1] = lerp(q[1], end[1], .35); prev[N - 1][0] = q[0]; prev[N - 1][1] = q[1]; }
   pts[0][0] = ANCHOR[0]; pts[0][1] = ANCHOR[1];
+  if (rope.grab > 0) { const g = pts[rope.grab]; g[0] = rope.gx; g[1] = rope.gy; prev[rope.grab][0] = g[0]; prev[rope.grab][1] = g[1]; }
   for (let it = 0; it < 22; it++) {
     for (let i = 0; i < N; i++) {
       const a = pts[i], b = pts[i + 1];
@@ -1669,7 +1685,7 @@ function updateRope(dt) {
     p[0] = clamp(p[0], VB.x + 8, VB.x + VB.w - 8); p[1] = clamp(p[1], VB.y + 8, VB.y + VB.h - 8);
     energy += Math.abs(p[0] - prev[i][0]) + Math.abs(p[1] - prev[i][1]);
   }
-  if (!rope.held && energy < .4) rope.awake--; else rope.awake = 60;
+  if (!rope.held && rope.grab < 0 && energy < .4) rope.awake--; else rope.awake = 60;
   renderRope();
 }
 function renderRope() {
@@ -1680,7 +1696,7 @@ function renderRope() {
   let d = `M${F(pts[0][0])} ${F(pts[0][1])}`;
   for (let i = 1; i < N - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; d += ` Q${F(pts[i][0])} ${F(pts[i][1])} ${F(mx)} ${F(my)}`; }
   d += ` L${F(ex)} ${F(ey)}`;
-  rope.outer.setAttribute('d', d); rope.inner.setAttribute('d', d);
+  rope.outer.setAttribute('d', d); rope.inner.setAttribute('d', d); rope.strip.setAttribute('d', d);
   rope.plug.setAttribute('transform', `translate(${F(b[0])} ${F(b[1])}) rotate(${F(ang * 180 / Math.PI)})`);
 }
 
@@ -1916,6 +1932,10 @@ let resetting = false;
     FILL(g, t, '#fff', { class: 'rz-tri' }); P(g, t, 3.5);
     P(g, line(x, y - 6, x, y + 2, .2), 3.5); FILL(g, ellC(x, y + 6, 1.8, 1.8), '#141414');
   });
+  // faint glow so it can still be found in the dark
+  const dk = G($('L_top'), { class: 'dark-only' });
+  mk('path', { d: ell(RX, RY, 52, 52, .02, .4), stroke: '#ffc9c4', 'stroke-width': 3, fill: 'none', opacity: .55, 'stroke-linecap': 'round' }, dk);
+  mk('path', { d: ell(RX, RY, 29, 29, .03, .3), stroke: '#ffc9c4', 'stroke-width': 2.5, fill: 'none', opacity: .45, 'stroke-linecap': 'round' }, dk);
   // flashing red border while it resets
   const al = $('L_alarm');
   mk('polygon', { points: BOARD_PTS, fill: 'none', stroke: '#ff2a1f', 'stroke-width': 18, 'stroke-linejoin': 'round', opacity: .8 }, al);
@@ -1944,7 +1964,7 @@ function resetBoard() {
   // weather, light, power, lighting
   state.weather = null; for (const k in wbEls) wbEls[k].classList.remove('act');
   state.lightOn = true; swNub.setAttribute('transform', ''); clearTimeout(eyesTimer); hideDarkEyes();
-  rope.socket = null; rope.held = false; state.powerMode = 'none';
+  rope.socket = null; rope.held = false; rope.grab = -1; state.powerMode = 'none';
   rope.pts.forEach((p, i) => { p[0] = rope.init[i][0]; p[1] = rope.init[i][1]; rope.prev[i][0] = p[0]; rope.prev[i][1] = p[1]; });
   rope.inner.setAttribute('stroke', '#fff'); rope.awake = 60; renderRope();
   slider.lastTick = 0; slider.x = slider.x0; slider.thumb.setAttribute('transform', `translate(${slider.x0} 564)`); state.backgroundLighting = 0;
