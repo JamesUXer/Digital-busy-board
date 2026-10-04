@@ -33,7 +33,9 @@ There are no points, levels, rewards, timers or fail states. Nothing tries to ke
 | Curtain | Drag sideways | An owl |
 | Spring lever | Pull down, let go | Something silly happens somewhere else, on release |
 | "blue" blob | Press and hold | A balloon inflates, then deflates when you let go |
-| "red" and "green" blobs | Hold both at once | The whole board hops. Made for two fingers or two people |
+| "red" blob | Press | Red paint floods the background. Press again and it drains back into the button |
+| "green" blob | Press | A few splats of green paint land around the board, then slowly dry and fade |
+| "red" and "green" together | Hold both at once | The whole board hops. Made for two fingers or two people |
 | Fogged mirror | Rub | A face appears. The fog slowly comes back |
 | Ladybird | Drag anywhere | The crocodile watches it, the giraffe giggles, the curtain wiggles, something peeks out of the window |
 | Window | (nothing) | Every so often, something passes by on its own |

@@ -113,6 +113,8 @@ html[data-power=colour] #blob-green .bfill{fill:rgba(70,200,100,.55)}
 .shell{transition:fill .5s}
 html[data-power=colour] .shell{fill:#ff4a3a}
 
+.splatIn{transform-box:fill-box;transform-origin:center;animation:splatIn .22s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes splatIn{0%{transform:scale(.2)}100%{transform:scale(1)}}
 #owlRays{opacity:0;transition:opacity .25s}
 #owlRays.on{opacity:1}
 
@@ -159,6 +161,7 @@ html[data-power=colour] .shell{fill:#ff4a3a}
   <g id="L_sky"></g>
   <g id="L_lines"></g>
   <g id="L_obj"></g>
+  <g id="L_paint" clip-path="url(#boardClip)"></g>
   <g id="L_snow" class="w-snow"></g>
   <g id="L_balloon"></g>
   <g id="L_hits"></g>
@@ -330,6 +333,9 @@ const sfx = {
   pitter: () => play('pitter', t => { for (let i = 0; i < 6; i++) noise(t + i * .045 + Math.random() * .02, .03, .3, 'highpass', 2500); return .35; }),
   twinkle: () => play('twinkle', t => { tone('sine', 1568, t, .25, .12); tone('sine', 2093, t + .09, .3, .1); return .4; }),
   plugIn: () => play('plug', t => { noise(t, .03, .6, 'bandpass', 1500, 2); tone('sine', 180, t + .02, .3, .2, 640); return .34; }),
+  pour: () => play('pour', t => { noise(t, .5, .3, 'lowpass', 300, 1, 1400); tone('sine', 120, t, .4, .15, 70); return .5; }, 300),
+  drain: () => play('drain', t => { noise(t, .45, .25, 'lowpass', 1400, 1, 250); tone('sine', 260, t, .4, .08, 90); return .45; }, 300),
+  splat: () => play('splat', t => { tone('sine', 170, t, .12, .35, 55); noise(t, .14, .45, 'lowpass', 900); noise(t + .05, .08, .2, 'bandpass', 2400, 2); return .16; }, 60),
   tada: () => play('tada', t => { [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, t + i * .085, .28, .18)); return .6; }, 600),
   boop: () => play('boop', t => { tone('sine', 330, t, .08, .12, 300); return .09; }, 60),
   deflate: () => play('deflate', t => { const o = tone('sawtooth', 320, t, .5, .08, 70); const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 28; lg.gain.value = 40; l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + .52); return .52; }, 300),
@@ -407,6 +413,7 @@ mk('rect', { x: 0, y: 0, width: 1100, height: 1200, fill: '#e3edf8', opacity: .5
 const rainbow = G(bgClip, { class: 'pw-colour' });
 const rbCircles = [0, 1, 2, 3].map(i => mk('circle', { cx: 300 + i * 150, cy: 400 + i * 120, r: 380, fill: `url(#rg${i})`, opacity: .55 }, rainbow));
 mk('rect', { x: 0, y: 0, width: 1100, height: 1200, fill: '#f9fcff', opacity: .9, class: 'pw-white' }, bgClip);
+const redPaint = { on: false, r: 0, el: mk('path', { d: '', fill: '#ff2a1f', opacity: .58 }, bgClip) };
 // white power: halo round the board
 const halo = G(BG, { class: 'pw-white' });
 mk('polygon', { points: BOARD_PTS, fill: 'none', stroke: '#fff', 'stroke-width': 40, filter: 'url(#blur10)' }, halo);
@@ -1176,10 +1183,66 @@ function updateBalloon(dt) {
 const twin = { red: false, green: false, fired: false };
 ['red', 'green'].forEach((name, i) => {
   onDrag(HITS.children[HITS.children.length - 2 + i], {
-    down() { twin[name] = true; blobEls[name].classList.add('down'); sfx.boop(); checkTwin(); },
+    down() { twin[name] = true; blobEls[name].classList.add('down'); if (name === 'red') toggleRedPaint(); else splatGreen(); checkTwin(); },
     up() { twin[name] = false; blobEls[name].classList.remove('down'); twin.fired = false; }
   });
 });
+// red: pour red paint over the background; press again and it drains back into the button
+function toggleRedPaint() {
+  redPaint.on = !redPaint.on;
+  if (redPaint.on) sfx.pour(); else sfx.drain();
+}
+function updateRedPaint(dt) {
+  const target = redPaint.on ? 1500 : 0;
+  if (Math.abs(target - redPaint.r) < 1) { if (redPaint.r === target) return; redPaint.r = target; }
+  else redPaint.r += (target - redPaint.r) * Math.min(1, dt * (redPaint.on ? 3.2 : 4.5));
+  const r = redPaint.r;
+  if (r < 2) { redPaint.el.setAttribute('d', ''); return; }
+  // wobbly puddle edge so it reads as paint, not a spotlight
+  const pts = [];
+  for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; const k = 1 + .06 * Math.sin(i * 2.7 + r * .01); pts.push([553 + Math.cos(a) * r * k, 1052 + Math.sin(a) * r * k]); }
+  redPaint.el.setAttribute('d', cr(pts, true));
+}
+// green: flick a few paint splats somewhere on the board; they dry and fade on their own
+const splats = [];
+const PAINT = $('L_paint');
+const GREENS = ['#2fb84a', '#45c95a', '#27a33f', '#5ad46b'];
+function inBoard(x, y) {
+  const poly = [[52, 176], [910, 127], [976, 1076], [50, 1160]]; let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; }
+  return c;
+}
+function splatGreen() {
+  const n = 3 + Math.floor(Math.random() * 3);
+  for (let k = 0; k < n; k++) {
+    let x, y, tries = 0;
+    do { x = 70 + Math.random() * 890; y = 150 + Math.random() * 1000; tries++; } while (!inBoard(x, y) && tries < 20);
+    const r = 16 + Math.random() * 26, col = GREENS[Math.floor(Math.random() * GREENS.length)];
+    const outer = G(PAINT, { transform: `translate(${F(x)} ${F(y)})` });
+    const g = G(outer, { class: 'splatIn', style: `animation-delay:${k * 60}ms` });
+    const pts = [], m = 14;
+    for (let i = 0; i < m; i++) { const a = i / m * Math.PI * 2, rr = r * (.82 + Math.random() * .22); pts.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    const blob = G(g, { opacity: .82 });
+    mk('path', { d: cr(pts, true), fill: col }, blob);
+    const fingers = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < fingers; i++) { // thin flicks of paint
+      const a = Math.random() * 360, len = r * (.6 + Math.random() * .6), w = r * (.16 + Math.random() * .1);
+      mk('ellipse', { cx: F(r * .7 + len / 2), cy: 0, rx: F(len / 2 + w), ry: F(w), fill: col, transform: `rotate(${F(a)})` }, blob);
+    }
+    for (let i = 0; i < 5; i++) { const a = Math.random() * Math.PI * 2, d = r * (1.35 + Math.random() * .9), s = 2 + Math.random() * r * .14; mk('circle', { cx: F(Math.cos(a) * d), cy: F(Math.sin(a) * d), r: F(s), fill: col, opacity: .82 }, g); }
+    splats.push({ el: outer, born: performance.now() });
+  }
+  while (splats.length > 45) splats.shift().el.remove();
+  sfx.splat(); setTimeout(sfx.splat, 90);
+}
+function updateSplats(now) {
+  for (let i = splats.length - 1; i >= 0; i--) {
+    const age = (now - splats[i].born) / 1000;
+    if (age < 22) continue;
+    const op = 1 - (age - 22) / 6;
+    if (op <= 0) { splats[i].el.remove(); splats.splice(i, 1); } else splats[i].el.setAttribute('opacity', F(op * 100) / 100);
+  }
+}
 function checkTwin() {
   if (twin.red && twin.green && !twin.fired) { twin.fired = true; celebrate(); }
 }
@@ -1631,7 +1694,7 @@ let lastT = performance.now(), T = 0;
 function tick(now) {
   const dt = clamp((now - lastT) / 1000, 0, .05); lastT = Math.max(lastT, now); T += dt;
   updateRope(dt); updateCroc(dt); updateWheel(dt); updateLever(dt); updateDrawer(dt); updateFlap(dt); updateDoor(dt);
-  updateBalloon(dt); updateNeck(dt); updateProximity(dt, now); updateDisco(now, T); updateRainbow(T);
+  updateBalloon(dt); updateRedPaint(dt); updateSplats(now); updateNeck(dt); updateProximity(dt, now); updateDisco(now, T); updateRainbow(T);
   updateFog(now, dt); updatePasser(dt); updateDarkEyes(dt); drawFX(dt, T);
 }
 function frame(now) { tick(now); requestAnimationFrame(frame); }
