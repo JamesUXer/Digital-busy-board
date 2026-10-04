@@ -121,6 +121,12 @@ html[data-power=colour] .shell{fill:#ff4a3a}
 .glow{opacity:0;transition:opacity .35s}
 .glow.on{opacity:.5}
 #resetFade{transition:opacity 1.3s ease-in}
+.rz-haz,.rz-cap,.rz-tri,.rz-txt,.rz-shine{transition:fill .15s,stroke .15s}
+html.resetting .rz-haz,#resetBtn.down .rz-haz{fill:url(#hazard)}
+html.resetting .rz-cap,#resetBtn.down .rz-cap{fill:#ff2a1f}
+html.resetting .rz-tri,#resetBtn.down .rz-tri{fill:#ffd23f}
+html.resetting .rz-txt,#resetBtn.down .rz-txt{fill:#d4140b}
+html.resetting .rz-shine,#resetBtn.down .rz-shine{stroke:#fff}
 #resetFade.back{transition:opacity .7s ease-out}
 #resetBtn .cap{transform-box:fill-box;transform-origin:center;transition:transform .1s}
 #resetBtn.down .cap{transform:scale(.88)}
@@ -213,6 +219,44 @@ function applyState() {
   html.dataset.light = state.lightOn ? 'on' : 'off';
   html.dataset.power = state.powerMode;
   updateTint();
+  if (state.powerMode === 'colour') musicStart(); else musicStop();
+}
+
+/* friendly disco loop for the giraffe: C – Am – F – G, four on the floor, ~116 bpm */
+const music = { on: false, bus: null, next: 0, step: 0, timer: null };
+const M16 = 60 / 116 / 4;
+const BASS = [65.41, 55.0, 43.65, 49.0];
+const CHORDS = [[261.6, 329.6, 392.0], [220.0, 261.6, 329.6], [174.6, 220.0, 261.6], [196.0, 246.9, 293.7]];
+const TUNE = [[523.3, 0], [659.3, 3], [784.0, 6], [659.3, 10], [440.0, 16], [523.3, 19], [659.3, 22], [523.3, 26], [349.2, 32], [440.0, 35], [523.3, 38], [440.0, 42], [392.0, 48], [493.9, 51], [587.3, 54], [784.0, 58]];
+function musicStart() {
+  if (!ac || music.on) return;
+  music.on = true;
+  music.bus = ac.createGain();
+  music.bus.gain.setValueAtTime(.0001, ac.currentTime);
+  music.bus.gain.exponentialRampToValueAtTime(.42, ac.currentTime + .8);
+  music.bus.connect(master);
+  music.next = ac.currentTime + .08; music.step = 0;
+  music.timer = setInterval(musicSchedule, 25);
+}
+function musicStop() {
+  if (!music.on) return;
+  music.on = false; clearInterval(music.timer);
+  const bus = music.bus, now = ac.currentTime;
+  bus.gain.cancelScheduledValues(now); bus.gain.setValueAtTime(bus.gain.value, now); bus.gain.setTargetAtTime(.0001, now, .18);
+  setTimeout(() => bus.disconnect(), 1500);
+}
+function musicSchedule() {
+  while (music.on && music.next < ac.currentTime + .15) { musicStep(music.step, music.next); music.next += M16; music.step = (music.step + 1) % 64; }
+}
+function musicStep(i, t) {
+  const bus = music.bus, bar = Math.floor(i / 16), b = i % 16;
+  if (i % 4 === 0) tone('sine', 140, t, .16, .8, 45, bus);                                   // kick
+  if (i % 4 === 2) noise(t, .05, .22, 'highpass', 7000, 1, 0, bus);                          // open hat
+  else if (i % 2 === 1) noise(t, .02, .08, 'highpass', 8000, 1, 0, bus);                     // tick
+  if (b === 4 || b === 12) noise(t, .12, .3, 'bandpass', 1700, 1.2, 0, bus);                // clap
+  if (i % 2 === 0) tone('sawtooth', BASS[bar] * (i % 4 === 2 ? 2 : 1), t, .13, .16, 0, bus); // octave bass
+  if (b === 2 || b === 10) CHORDS[bar].forEach(f => tone('triangle', f, t, .14, .05, 0, bus)); // stabs
+  TUNE.forEach(([f, at]) => { if (at === i) tone('triangle', f, t, .2, .07, 0, bus); });   // little tune
 }
 
 /* ------------------------------------------------------------------ */
@@ -318,20 +362,20 @@ function play(name, fn, gap = 80) {
   const dur = fn(ac.currentTime) || .3;
   setTimeout(() => voices--, dur * 1000 + 40);
 }
-function tone(type, f, t, d, g = .25, f2) {
+function tone(type, f, t, d, g = .25, f2, dest = master) {
   const o = ac.createOscillator(), gn = ac.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t);
   if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
   gn.gain.setValueAtTime(.0001, t); gn.gain.exponentialRampToValueAtTime(g, t + .008); gn.gain.exponentialRampToValueAtTime(.0001, t + d);
-  o.connect(gn).connect(master); o.start(t); o.stop(t + d + .02);
+  o.connect(gn).connect(dest); o.start(t); o.stop(t + d + .02);
   return o;
 }
-function noise(t, d, g = .3, type = 'bandpass', freq = 1200, q = 1, f2) {
+function noise(t, d, g = .3, type = 'bandpass', freq = 1200, q = 1, f2, dest = master) {
   const s = ac.createBufferSource(); s.buffer = noiseBuf;
   const f = ac.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
   if (f2) f.frequency.exponentialRampToValueAtTime(f2, t + d);
   const gn = ac.createGain(); gn.gain.setValueAtTime(g, t); gn.gain.exponentialRampToValueAtTime(.0001, t + d);
-  s.connect(f).connect(gn).connect(master); s.start(t, Math.random() * .5); s.stop(t + d + .02);
+  s.connect(f).connect(gn).connect(dest); s.start(t, Math.random() * .5); s.stop(t + d + .02);
 }
 const sfx = {
   click: () => play('click', t => { noise(t, .035, .5, 'bandpass', 2600, 2); return .05; }),
@@ -1852,23 +1896,24 @@ let resetting = false;
   const defs = svg.querySelector('defs');
   const pat = mk('pattern', { id: 'hazard', width: 16, height: 16, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
   mk('rect', { width: 16, height: 16, fill: '#ffd23f' }, pat); mk('rect', { width: 8, height: 16, fill: '#141414' }, pat);
+  const patBW = mk('pattern', { id: 'hazardBW', width: 16, height: 16, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+  mk('rect', { width: 16, height: 16, fill: '#fff' }, patBW); mk('rect', { width: 8, height: 16, fill: '#141414' }, patBW);
   const L = $('L_reset');
   const g = G(L, { id: 'resetBtn' });
   // sign
   FILL(g, rectC(782, 160, 132, 40, 1), '#fff'); P(g, rect(782, 160, 132, 40, 1.2), 4);
-  txt(g, 848, 181, 'DO NOT TOUCH!!', 21, { fill: '#d4140b', style: 'font-weight:700', transform: `rotate(-3 848 181)` });
+  txt(g, 848, 181, 'DO NOT TOUCH!!', 21, { class: 'txt rz-txt', style: 'font-weight:700', transform: `rotate(-3 848 181)` });
   P(g, line(848, 200, 848, 212, .3), 4);
   // hazard ring + big red button
-  FILL(g, ellC(RX, RY, 52, 52, .02), 'url(#hazard)'); P(g, ell(RX, RY, 52, 52, .02, .5), 5);
+  FILL(g, ellC(RX, RY, 52, 52, .02), 'url(#hazardBW)', { class: 'rz-haz' }); P(g, ell(RX, RY, 52, 52, .02, .5), 5);
   FILL(g, ellC(RX, RY, 37, 37, .02), '#fff'); P(g, ell(RX, RY, 37, 37, .02, .3), 4);
   const cap = G(g, { class: 'cap' });
-  FILL(cap, ellC(RX, RY, 29, 29, .02), '#ff2a1f'); P(cap, ell(RX, RY, 29, 29, .03, .4), 4.5);
-  P(cap, `M${RX - 16} ${RY - 10} Q${RX - 10} ${RY - 20} ${RX} ${RY - 21}`, 4, 'none', { class: 'shine' });
-  cap.lastChild.style.stroke = '#fff';
+  FILL(cap, ellC(RX, RY, 29, 29, .02), '#fff', { class: 'rz-cap' }); P(cap, ell(RX, RY, 29, 29, .03, .4), 4.5);
+  P(cap, `M${RX - 16} ${RY - 10} Q${RX - 10} ${RY - 20} ${RX} ${RY - 21}`, 3, 'none', { class: 'rz-shine' });
   // little warning triangles
   [[788, 306], [908, 306]].forEach(([x, y]) => {
     const t = `M${x} ${y - 16} L${x + 14} ${y + 10} L${x - 14} ${y + 10} Z`;
-    FILL(g, t, '#ffd23f'); P(g, t, 3.5);
+    FILL(g, t, '#fff', { class: 'rz-tri' }); P(g, t, 3.5);
     P(g, line(x, y - 6, x, y + 2, .2), 3.5); FILL(g, ellC(x, y + 6, 1.8, 1.8), '#141414');
   });
   // flashing red border while it resets
@@ -1884,7 +1929,7 @@ let resetting = false;
 function startReset() {
   if (resetting) return;
   resetting = true;
-  sfx.beep(); setTimeout(sfx.siren, 220);
+  musicStop(); sfx.beep(); setTimeout(sfx.siren, 220);
   html.classList.add('resetting');
   const fade = $('resetFade');
   fade.classList.remove('back'); fade.setAttribute('opacity', 1);
